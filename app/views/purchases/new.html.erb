@@ -1,0 +1,176 @@
+<!-- app/views/purchases/new.html.erb -->
+<% content_for :title, "Nueva compra" %>
+
+<h1>Nueva compra</h1>
+
+<!-- Formulario inicial: subir documento (forzamos submit HTML para evitar Turbo Stream) -->
+<%= form_with url: preview_purchases_path, local: true, multipart: true, data: { turbo: false } do |f| %>
+  <div style="margin-bottom:1rem;">
+    <%= f.label :document, "Subir boleta (imagen o PDF)" %><br>
+    <%= f.file_field :document, required: true %>
+  </div>
+  <%= f.submit "Procesar boleta", class: "btn" %>
+<% end %>
+
+<hr>
+
+<!-- Si ya se procesó la boleta, mostramos el form precargado -->
+<% if @purchase.present? %>
+  <%= form_with model: @purchase, url: purchases_path, local: true, multipart: true, html: { id: "purchase-form" } do |f| %>
+    <%= hidden_field_tag :document_signed_id, @document_signed_id %>
+
+    <div style="margin-bottom:1rem;">
+      <%= f.label :supplier, "Proveedor" %><br>
+      <%= f.text_field :supplier, value: @purchase.supplier %>
+    </div>
+
+    <div style="margin-bottom:1rem;">
+      <%= f.label :rut, "RUT" %><br>
+      <%= f.text_field :rut, value: @purchase.rut %>
+    </div>
+
+    <div style="margin-bottom:1rem;">
+      <%= f.label :date, "Fecha" %><br>
+      <%= f.date_field :date, value: @purchase.date %>
+    </div>
+
+    <div style="margin-bottom:1rem;">
+      <%= f.label :total, "Total (CLP)" %><br>
+      <%= f.number_field :total, step: 1, value: @purchase.total %>
+    </div>
+
+    <!-- Builder de Ítems -->
+    <div style="margin:1rem 0;">
+      <label><b>Ítems</b></label>
+      <div id="items-builder"></div>
+      <!-- Campo oculto que el JS poblará con el JSON final -->
+      <%= f.hidden_field :items_json, id: "items-json" %>
+      <div style="margin-top:.5rem;">
+        <button type="button" id="add-item-btn">+ Agregar ítem</button>
+        <button type="button" id="recalc-btn" title="Recalcular totales de cada fila">Recalcular totales</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom:1rem;">
+      <%= f.label :raw_text, "Texto crudo" %><br>
+      <%= f.text_area :raw_text, rows: 6, value: @purchase.raw_text %>
+    </div>
+
+    <%= f.submit "Guardar compra", class: "btn-primary" %>
+  <% end %>
+<% end %>
+
+<p style="margin-top:1rem;">
+  <%= link_to "← Volver a compras", purchases_path %>
+</p>
+
+<script>
+(function() {
+  // ====== Utilidades ======
+  function num(v) {
+    if (v === null || v === undefined || v === "") return null;
+    // quitar separadores comunes
+    v = String(v).replace(/\./g, "").replace(/,/g, ".");
+    var n = parseFloat(v);
+    return isNaN(n) ? null : n;
+  }
+  function money(n) {
+    return (n === null || n === undefined) ? "" : n;
+  }
+
+  // ====== Estado inicial ======
+  var initialItems = <%= raw((@purchase.items || []).to_json) %>;
+
+  // ====== Render ======
+  var $root = document.getElementById("items-builder");
+  if (!$root) return; // la página puede no tener el builder (por ejemplo al primer load sin @purchase)
+
+  function renderTable(items) {
+    $root.innerHTML = `
+      <style>
+        #items-builder table { width:100%; border-collapse:collapse; background:white; margin-top:.25rem; }
+        #items-builder th, #items-builder td { border:1px solid #d1d5db; padding:.4rem; }
+        #items-builder thead { background:#f3f4f6; }
+        #items-builder input[type="number"] { width: 110px; }
+        #items-builder input[type="text"] { width: 100%; }
+        #items-builder .actions { text-align:center; }
+      </style>
+      <table>
+        <thead>
+          <tr>
+            <th style="width:45%;">Nombre</th>
+            <th style="width:15%;">Cantidad</th>
+            <th style="width:20%;">Precio unit.</th>
+            <th style="width:20%;">Total línea</th>
+            <th class="actions" style="width:70px;">Quitar</th>
+          </tr>
+        </thead>
+        <tbody id="items-tbody"></tbody>
+      </table>
+    `;
+
+    var $tbody = document.getElementById("items-tbody");
+    items.forEach(function(it, idx) { addRow($tbody, it, idx); });
+    if (items.length === 0) addRow($tbody, {name:"", qty:null, unit_price:null, line_total:null}, 0);
+  }
+
+  function addRow($tbody, it, idx) {
+    var tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td><input type="text" class="i-name" value="${(it.name || "").toString().replace(/"/g, "&quot;")}"></td>
+      <td><input type="number" step="any" class="i-qty" value="${money(it.qty)}"></td>
+      <td><input type="number" step="any" class="i-unit" value="${money(it.unit_price)}"></td>
+      <td><input type="number" step="any" class="i-total" value="${money(it.line_total)}"></td>
+      <td class="actions"><button type="button" class="rm">✕</button></td>
+    `;
+    $tbody.appendChild(tr);
+
+    // Recalcular total de línea si cambian qty o unit_price
+    var qty = tr.querySelector(".i-qty");
+    var unit = tr.querySelector(".i-unit");
+    var total = tr.querySelector(".i-total");
+    function recalc() {
+      var q = num(qty.value), u = num(unit.value);
+      total.value = (q !== null && u !== null) ? (q * u) : "";
+    }
+    qty.addEventListener("input", recalc);
+    unit.addEventListener("input", recalc);
+
+    tr.querySelector(".rm").addEventListener("click", function() {
+      tr.remove();
+    });
+  }
+
+  renderTable(initialItems);
+
+  // ====== Botones ======
+  document.getElementById("add-item-btn")?.addEventListener("click", function() {
+    var $tbody = document.getElementById("items-tbody");
+    addRow($tbody, {name:"", qty:null, unit_price:null, line_total:null}, 0);
+  });
+
+  document.getElementById("recalc-btn")?.addEventListener("click", function() {
+    document.querySelectorAll("#items-tbody tr").forEach(function(tr) {
+      var qty = num(tr.querySelector(".i-qty").value);
+      var unit = num(tr.querySelector(".i-unit").value);
+      var total = tr.querySelector(".i-total");
+      total.value = (qty !== null && unit !== null) ? (qty * unit) : "";
+    });
+  });
+
+  // ====== Al enviar el form → volcar a items_json ======
+  document.getElementById("purchase-form")?.addEventListener("submit", function() {
+    var out = [];
+    document.querySelectorAll("#items-tbody tr").forEach(function(tr) {
+      var name  = tr.querySelector(".i-name").value || "";
+      var qty   = num(tr.querySelector(".i-qty").value);
+      var unit  = num(tr.querySelector(".i-unit").value);
+      var total = num(tr.querySelector(".i-total").value);
+      // No agregamos filas completamente vacías
+      if (name.trim() === "" && qty === null && unit === null && total === null) return;
+      out.push({ name: name, qty: qty, unit_price: unit, line_total: total });
+    });
+    document.getElementById("items-json").value = JSON.stringify(out);
+  });
+})();
+</script>

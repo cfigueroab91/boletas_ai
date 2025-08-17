@@ -1,0 +1,17 @@
+# Read about fixtures at https://api.rubyonrails.org/classes/ActiveRecord/FixtureSet.html
+
+one:
+  supplier: MyString
+  rut: MyString
+  date: 2025-08-17
+  total: 9.99
+  items: 
+  raw_text: MyText
+
+two:
+  supplier: MyString
+  rut: MyString
+  date: 2025-08-17
+  total: 9.99
+  items: 
+  raw_text: MyText

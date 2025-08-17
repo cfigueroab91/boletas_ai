@@ -1,0 +1,160 @@
+<!-- app/views/purchases/index.html.erb -->
+<% content_for :title, "Compras" %>
+
+<h1 style="margin-bottom:.75rem;">Compras</h1>
+
+<%= form_with url: purchases_path, method: :get, local: true do %>
+  <div style="display:flex; gap:.75rem; align-items:flex-end; flex-wrap:wrap;">
+    <div>
+      <label>Buscar</label><br>
+      <%= text_field_tag :q, @q, placeholder: "Proveedor / RUT / texto", size: 28 %>
+    </div>
+    <div>
+      <label>Desde</label><br>
+      <%= date_field_tag :from, @from %>
+    </div>
+    <div>
+      <label>Hasta</label><br>
+      <%= date_field_tag :to, @to %>
+    </div>
+    <div>
+      <br>
+      <%= submit_tag "Filtrar" %>
+      <%= link_to "Limpiar", purchases_path, style: "margin-left:.5rem;" %>
+    </div>
+  </div>
+<% end %>
+
+<div style="margin:.75rem 0; display:flex; gap:.5rem; flex-wrap:wrap;">
+  <%= button_to "🧨 Eliminar TODO",
+        destroy_all_purchases_path,
+        method: :delete,
+        form: { class: "js-confirm-submit" },
+        params: {},
+        data: { confirm_message: "¿Eliminar TODAS las boletas? Esta acción no se puede deshacer." } %>
+
+  <%= button_to "🧹 Eliminar resultados filtrados",
+        destroy_filtered_purchases_path(q: @q, from: @from, to: @to),
+        method: :delete,
+        form: { class: "js-confirm-submit" },
+        params: {},
+        data: { confirm_message: "¿Eliminar SOLO las boletas que están filtradas actualmente?" } %>
+</div>
+
+<p style="margin-top:.75rem;">
+  <b><%= @purchases.size %></b> resultados
+  <% if @total_sum.present? %> — Total sumado: <b>CLP <%= number_with_delimiter(@total_sum.to_i) %></b><% end %>
+</p>
+
+<table border="1" cellpadding="6" cellspacing="0" style="width:100%; border-collapse:collapse; background:white;">
+  <thead style="background:#f3f4f6;">
+    <tr>
+      <th style="text-align:left;">Fecha</th>
+      <th style="text-align:left;">Proveedor</th>
+      <th style="text-align:left;">RUT</th>
+      <th style="text-align:right;">Total (CLP)</th>
+      <th style="text-align:center; width: 180px;">Acciones</th>
+    </tr>
+  </thead>
+  <tbody>
+    <% if @purchases.any? %>
+      <% @purchases.each do |p| %>
+        <tr>
+          <td><%= p.date || p.created_at.to_date %></td>
+          <td><%= p.supplier.presence || "—" %></td>
+          <td><%= p.rut.presence || "—" %></td>
+          <td style="text-align:right;"><%= p.total ? number_with_delimiter(p.total.to_i) : "—" %></td>
+          <td style="text-align:center;">
+            <%= link_to "Ver", p %> |
+            <%= link_to "Editar", edit_purchase_path(p) %> |
+            <%# Usamos button_to como enlace para poder abrir el modal %>
+            <%= button_to "Eliminar",
+                  purchase_path(p),
+                  method: :delete,
+                  form: { class: "inline js-confirm-submit" },
+                  params: {},
+                  data: { confirm_message: "¿Eliminar esta boleta?" } %>
+          </td>
+        </tr>
+      <% end %>
+    <% else %>
+      <tr>
+        <td colspan="5" style="text-align:center; padding:1rem; color:#6b7280;">Sin resultados</td>
+      </tr>
+    <% end %>
+  </tbody>
+</table>
+
+<p style="margin-top:1rem;">
+  <%= link_to "Subir nueva boleta", root_path %>
+</p>
+
+<!-- ============== Modal de confirmación ============== -->
+<div id="confirm-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:1000; align-items:center; justify-content:center;">
+  <div style="background:#fff; max-width:520px; width:92%; border-radius:12px; box-shadow:0 10px 35px rgba(0,0,0,.25); overflow:hidden;">
+    <div style="padding:1rem 1.25rem; border-bottom:1px solid #e5e7eb;">
+      <h3 style="margin:0; font-size:1.1rem;">Confirmar acción</h3>
+    </div>
+    <div style="padding:1rem 1.25rem;">
+      <p id="confirm-message" style="margin:0; font-size:.95rem; color:#374151;">¿Seguro?</p>
+    </div>
+    <div style="display:flex; gap:.5rem; justify-content:flex-end; padding: .75rem 1.25rem; background:#f9fafb; border-top:1px solid #e5e7eb;">
+      <button type="button" id="confirm-cancel" style="padding:.5rem .9rem; border:1px solid #d1d5db; background:#fff; border-radius:8px; cursor:pointer;">Cancelar</button>
+      <button type="button" id="confirm-accept" style="padding:.5rem .9rem; border:1px solid #991b1b; background:#dc2626; color:#fff; border-radius:8px; cursor:pointer;">Sí, eliminar</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  form.inline { display:inline; }
+</style>
+
+<script>
+(function(){
+  let pendingForm = null;
+
+  const modal   = document.getElementById('confirm-modal');
+  const msgNode = document.getElementById('confirm-message');
+  const btnOk   = document.getElementById('confirm-accept');
+  const btnNo   = document.getElementById('confirm-cancel');
+
+  function openModal(message, form) {
+    pendingForm = form;
+    msgNode.textContent = message || '¿Seguro?';
+    modal.style.display = 'flex';
+  }
+  function closeModal() {
+    modal.style.display = 'none';
+    pendingForm = null;
+  }
+
+  // Interceptar todos los forms marcados con js-confirm-submit
+  document.querySelectorAll('form.js-confirm-submit').forEach(function(form){
+    form.addEventListener('submit', function(ev){
+      // Evita envío inmediato y abre modal
+      ev.preventDefault();
+      const message = form.dataset.confirmMessage || '¿Seguro?';
+      openModal(message, form);
+    });
+  });
+
+  btnOk?.addEventListener('click', function(){
+    if (pendingForm) {
+      // Quitar el listener para que no vuelva a interceptar
+      pendingForm.classList.remove('js-confirm-submit');
+      pendingForm.submit();
+    }
+    closeModal();
+  });
+
+  btnNo?.addEventListener('click', closeModal);
+
+  // cerrar con ESC o clic fuera
+  modal?.addEventListener('click', function(e){
+    if (e.target === modal) closeModal();
+  });
+  document.addEventListener('keydown', function(e){
+    if (e.key === 'Escape' && modal.style.display === 'flex') closeModal();
+  });
+})();
+</script>

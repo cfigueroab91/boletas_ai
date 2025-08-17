@@ -1,0 +1,77 @@
+<!-- app/views/purchases/show.html.erb -->
+<% content_for :title, "Detalle de compra" %>
+
+<h1>Detalle de compra</h1>
+
+<p>
+  <strong>Proveedor:</strong>
+  <%= @purchase.supplier.presence || "(sin dato)" %>
+</p>
+
+<p>
+  <strong>RUT:</strong>
+  <%= @purchase.rut.presence || "(sin dato)" %>
+</p>
+
+<p>
+  <strong>Fecha:</strong>
+  <%= @purchase.date.present? ? @purchase.date.strftime("%d-%m-%Y") : "(sin dato)" %>
+</p>
+
+<p>
+  <strong>Total:</strong>
+  <%= @purchase.total.present? ? number_to_currency(@purchase.total, unit: "$", precision: 0, delimiter: ".") : "(sin dato)" %>
+</p>
+
+<hr>
+
+<h2>Ítems</h2>
+<% if @purchase.items.present? && @purchase.items.any? %>
+  <table border="1" cellpadding="6" cellspacing="0">
+    <thead>
+      <tr>
+        <th>Nombre</th>
+        <th>Cantidad</th>
+        <th>Precio Unitario</th>
+        <th>Total Línea</th>
+      </tr>
+    </thead>
+    <tbody>
+      <% @purchase.items.each do |item| %>
+        <tr>
+          <td><%= item["name"] %></td>
+          <td><%= item["qty"] %></td>
+          <td><%= item["unit_price"].present? ? number_to_currency(item["unit_price"], unit: "$", precision: 0, delimiter: ".") : "" %></td>
+          <td><%= item["line_total"].present? ? number_to_currency(item["line_total"], unit: "$", precision: 0, delimiter: ".") : "" %></td>
+        </tr>
+      <% end %>
+    </tbody>
+  </table>
+<% else %>
+  <p>(No se registraron ítems)</p>
+<% end %>
+
+<hr>
+
+<h2>Texto crudo</h2>
+<pre style="background:#f8f8f8; padding:1rem; border:1px solid #ccc;">
+<%= @purchase.raw_text %>
+</pre>
+
+<hr>
+
+<h2>Documento adjunto</h2>
+<% if @purchase.document.attached? %>
+  <p>
+    <%= link_to "Descargar documento", rails_blob_path(@purchase.document, disposition: "attachment") %>
+  </p>
+  <% if @purchase.document.image? %>
+    <p><%= image_tag @purchase.document, style: "max-width: 400px; border:1px solid #ccc;" %></p>
+  <% end %>
+<% else %>
+  <p>(Sin documento adjunto)</p>
+<% end %>
+
+<p style="margin-top:1rem;">
+  <%= link_to "← Volver a compras", purchases_path %>
+</p>
