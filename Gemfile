@@ -64,6 +64,6 @@ end
 
 gem "mini_magick"
 
-gem "ruby-openai", "~> 8.2"
+gem "ruby-openai", "~> 8.3"
 
 gem "dotenv-rails", groups: ["development", "test"]
